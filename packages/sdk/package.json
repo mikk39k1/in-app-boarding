@@ -1,0 +1,35 @@
+{
+  "name": "@ib/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "echo 'no lint for sdk'",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ib/shared": "workspace:*",
+    "@floating-ui/dom": "^1.6.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "happy-dom": "^15.11.6",
+    "tsup": "^8.3.5",
+    "typescript": "^5",
+    "vitest": "^2.1.8"
+  }
+}

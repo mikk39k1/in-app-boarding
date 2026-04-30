@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Environment {
+  DEV
+  PROD
+}
+
+// Mirrors Supabase auth.users by UUID. We never store passwords ourselves.
+model User {
+  id        String    @id @db.Uuid
+  email     String    @unique
+  projects  Project[]
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Project {
+  id            String         @id @default(cuid())
+  name          String
+  ownerId       String         @map("owner_id") @db.Uuid
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  prodBaseUrl   String?        @map("prod_base_url")
+  devBaseUrl    String?        @default("http://localhost:3001") @map("dev_base_url")
+  apiKeys       ApiKey[]
+  flows         Flow[]
+  builderTokens BuilderToken[]
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  @@index([ownerId])
+  @@map("projects")
+}
+
+model ApiKey {
+  id          String      @id @default(cuid())
+  projectId   String      @map("project_id")
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  environment Environment
+  // Hash of the full key (sha256). The plaintext is shown once at creation.
+  keyHash     String      @unique @map("key_hash")
+  // First 12 chars of the plaintext key, e.g. "dev_abc123ef" — for UI display only.
+  prefix      String
+  label       String?
+  lastUsedAt  DateTime?   @map("last_used_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  revokedAt   DateTime?   @map("revoked_at")
+
+  @@index([projectId, environment])
+  @@map("api_keys")
+}
+
+model Flow {
+  id          String      @id @default(cuid())
+  projectId   String      @map("project_id")
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  environment Environment
+  name        String
+  description String?
+  isPublished Boolean     @default(false) @map("is_published")
+  steps       FlowStep[]
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([projectId, environment])
+  @@map("flows")
+}
+
+model FlowStep {
+  id             String   @id @default(cuid())
+  flowId         String   @map("flow_id")
+  flow           Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  order          Int
+  title          String
+  body           String
+  // Serialized 5-tier element profile (see @ib/shared/ElementProfile).
+  targetProfile  Json     @map("target_profile")
+  placement      String   @default("auto")
+  pageUrlPattern String?  @map("page_url_pattern")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([flowId, order])
+  @@map("flow_steps")
+}
+
+// Short-lived URL token issued to launch the builder on a client app.
+// Exchanged for a JWT by the SDK on the client side.
+model BuilderToken {
+  id          String      @id @default(cuid())
+  token       String      @unique
+  projectId   String      @map("project_id")
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  environment Environment
+  userId      String      @map("user_id") @db.Uuid
+  flowId      String?     @map("flow_id")
+  expiresAt   DateTime    @map("expires_at")
+  consumedAt  DateTime?   @map("consumed_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([token])
+  @@map("builder_tokens")
+}
