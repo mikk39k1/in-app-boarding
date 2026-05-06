@@ -2,14 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { randomBytes } from "node:crypto";
-import { prisma, type Environment } from "@ib/db";
+import { prisma } from "@ib/db";
 import { requireUser } from "@/lib/auth";
 import { BUILDER_TOKEN_TTL_SECONDS } from "@ib/shared";
 
 export async function launchBuilder(formData: FormData) {
   const user = await requireUser();
   const flowId = String(formData.get("flowId") ?? "");
-  const environment = String(formData.get("environment") ?? "") as Environment;
+  const environment = formData.get("environment") as "DEV" | "PROD" | undefined;
   if (!flowId || (environment !== "DEV" && environment !== "PROD")) return;
 
   const flow = await prisma.flow.findFirst({
