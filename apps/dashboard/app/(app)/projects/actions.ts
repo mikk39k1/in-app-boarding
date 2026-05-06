@@ -194,5 +194,5 @@ export async function deleteFlow(formData: FormData) {
   if (!flow) return;
 
   await prisma.flow.delete({ where: { id: flow.id } });
-  revalidatePath(`/projects/${flow.projectId}`);
+  redirect(`/projects/${flow.projectId}`);
 }

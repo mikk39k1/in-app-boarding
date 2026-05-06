@@ -66,6 +66,8 @@ model Flow {
   name        String
   description String?
   isPublished Boolean     @default(false) @map("is_published")
+  // Flow-level default for dimmed spotlight backdrop during steps.
+  dimBackground Boolean   @default(false) @map("dim_background")
   steps       FlowStep[]
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
@@ -81,8 +83,14 @@ model FlowStep {
   order          Int
   title          String
   body           String
-  // Serialized 5-tier element profile (see @ib/shared/ElementProfile).
+  // Serialized 6-tier element profile (see @ib/shared/ElementProfile).
   targetProfile  Json     @map("target_profile")
+  // Optional pre-target interactions (tabs / accordions) to reveal hidden UI.
+  revealActions  Json?    @map("reveal_actions")
+  // Optional per-step override. NULL => inherit from flow.dimBackground.
+  dimBackground  Boolean? @map("dim_background")
+  // If true, clicking the target advances to next step.
+  advanceOnTargetClick Boolean @default(false) @map("advance_on_target_click")
   placement      String   @default("auto")
   pageUrlPattern String?  @map("page_url_pattern")
   createdAt      DateTime @default(now()) @map("created_at")

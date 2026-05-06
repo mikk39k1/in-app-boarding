@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@ib/db";
 import { hashApiKey, environmentOfKey } from "@/lib/api-key";
+import { verifyBuilderJwt } from "@/lib/jwt";
 
 const ALLOWED_HEADERS = "Authorization, Content-Type, X-IB-Api-Key";
 const ALLOWED_METHODS = "GET, POST, PUT, OPTIONS";
@@ -28,9 +29,10 @@ function readBearer(request: NextRequest): string | null {
 }
 
 /**
- * Look up the project tied to the bearer (api-key path only — JWTs don't tell
- * us which origins to allow). Returns null if the bearer isn't a known dev/prod
- * api key.
+ * Look up the project tied to the bearer. Supports both auth modes:
+ *   - dev_/prod_ API key  -> identify project via the key's hash
+ *   - builder JWT         -> identify project via the JWT claims
+ * Returns null if the bearer is missing or doesn't resolve to a known project.
  */
 async function projectOriginsFromRequest(
   request: NextRequest,
@@ -42,24 +44,41 @@ async function projectOriginsFromRequest(
   const bearer =
     readBearer(request) ?? request.headers.get("x-ib-api-key");
   if (!bearer) return null;
+
+  // API key path
   const env = environmentOfKey(bearer);
-  if (!env) return null;
-  const hash = await hashApiKey(bearer);
-  const row = await prisma.apiKey.findUnique({
-    where: { keyHash: hash },
-    select: {
-      revokedAt: true,
-      environment: true,
-      project: {
-        select: { devBaseUrl: true, prodBaseUrl: true },
+  if (env) {
+    const hash = await hashApiKey(bearer);
+    const row = await prisma.apiKey.findUnique({
+      where: { keyHash: hash },
+      select: {
+        revokedAt: true,
+        environment: true,
+        project: {
+          select: { devBaseUrl: true, prodBaseUrl: true },
+        },
       },
-    },
+    });
+    if (!row || row.revokedAt || row.environment !== env) return null;
+    return {
+      devBaseUrl: row.project.devBaseUrl,
+      prodBaseUrl: row.project.prodBaseUrl,
+      environment: env,
+    };
+  }
+
+  // Builder JWT path
+  const claims = await verifyBuilderJwt(bearer);
+  if (!claims) return null;
+  const project = await prisma.project.findUnique({
+    where: { id: claims.projectId },
+    select: { devBaseUrl: true, prodBaseUrl: true },
   });
-  if (!row || row.revokedAt || row.environment !== env) return null;
+  if (!project) return null;
   return {
-    devBaseUrl: row.project.devBaseUrl,
-    prodBaseUrl: row.project.prodBaseUrl,
-    environment: env,
+    devBaseUrl: project.devBaseUrl,
+    prodBaseUrl: project.prodBaseUrl,
+    environment: claims.environment,
   };
 }
 
@@ -137,12 +156,13 @@ export async function handleSdkCors(
   }
 
   const project = await projectOriginsFromRequest(request);
-  if (!project) {
-    // Let downstream auth produce the proper 401.
-    return null;
-  }
 
+  // Origin policy: if we resolved a project, enforce its dev/prod URL list.
+  // If we couldn't resolve one (bad/missing bearer), still attach permissive
+  // CORS headers so the downstream 401 is visible to the client instead of
+  // being eaten by the browser as "Failed to fetch".
   if (
+    project &&
     !originAllowedFor(
       origin,
       project.environment,
@@ -152,6 +172,10 @@ export async function handleSdkCors(
   ) {
     return new NextResponse("CORS: origin not allowed for this project", {
       status: 403,
+      headers: {
+        "Access-Control-Allow-Origin": origin,
+        Vary: "Origin",
+      },
     });
   }
 

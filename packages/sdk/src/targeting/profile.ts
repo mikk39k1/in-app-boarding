@@ -14,6 +14,16 @@ const ONBOARDING_DATA_ATTRS = [
   "data-test-id",
 ];
 
+/**
+ * Class-similarity matching threshold (tier 5). An element is accepted if at
+ * least this fraction of the *recorded* stable classes are still present on
+ * the candidate. Recall, not Jaccard — we don't penalise newly-added classes.
+ */
+export const CLASS_SIMILARITY_THRESHOLD = 0.95;
+
+/** Don't bother running the class tier on near-classless elements. */
+const MIN_CLASSES_FOR_TIER_5 = 2;
+
 /** CSS-escape an attribute selector value. */
 function cssEscape(value: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
@@ -23,7 +33,38 @@ function cssEscape(value: string): string {
 }
 
 /**
- * Build a 5-tier element profile, capturing whatever signals are available so
+ * Strip classes that look build-generated (CSS-modules suffixes, emotion /
+ * styled-components hashes). We keep Tailwind utilities, BEM, and plain
+ * semantic class names, which are the signals that actually persist across
+ * builds.
+ */
+export function filterStableClasses(classList: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of classList) {
+    const cls = raw.trim();
+    if (!cls || seen.has(cls)) continue;
+    if (looksGeneratedClass(cls)) continue;
+    seen.add(cls);
+    out.push(cls);
+  }
+  return out;
+}
+
+function looksGeneratedClass(cls: string): boolean {
+  // Emotion: `css-1j3kfly`, `css-abc123def`
+  if (/^css-[a-z0-9]{5,}$/i.test(cls)) return true;
+  // styled-components: `sc-bdVaJa`, `sc-AxjAm`
+  if (/^sc-[a-zA-Z]{6,}$/.test(cls)) return true;
+  // CSS-modules: `Button_root__abc123`, `Card__xyz789`
+  if (/__[a-zA-Z0-9]{5,}$/.test(cls)) return true;
+  // CSS-modules without leading separator: `_3kbF9X`
+  if (/^_[a-zA-Z0-9]{5,}$/.test(cls)) return true;
+  return false;
+}
+
+/**
+ * Build a 6-tier element profile, capturing whatever signals are available so
  * a future page-load can re-discover the element via the cascade in
  * findElement().
  */
@@ -60,7 +101,13 @@ export function recordProfile(el: Element): ElementProfile {
     profile.text = text;
   }
 
-  // Tier 5: structural DOM path (always recorded as a last resort)
+  // Tier 5: stable class list (Tailwind / BEM / semantic names)
+  const classes = filterStableClasses(Array.from(el.classList));
+  if (classes.length >= MIN_CLASSES_FOR_TIER_5) {
+    profile.classes = classes;
+  }
+
+  // Tier 6: structural DOM path (always recorded as a last resort)
   profile.domPath = computeDomPath(el);
 
   return profile;
@@ -152,15 +199,61 @@ export function findElement(
     }
   }
 
-  // Tier 5: structural path
+  // Tier 5: class similarity (Tailwind / BEM / semantic class set)
+  if (profile.classes && profile.classes.length >= MIN_CLASSES_FOR_TIER_5) {
+    const match = findByClassSimilarity(
+      profile.tagName,
+      profile.classes,
+      scope,
+    );
+    if (match) return { element: match, tier: 5 };
+  }
+
+  // Tier 6: structural path
   if (profile.domPath) {
     try {
       const el = scope.querySelector(profile.domPath);
-      if (el) return { element: el, tier: 5 };
+      if (el) return { element: el, tier: 6 };
     } catch {
       // Invalid selector; fall through.
     }
   }
 
   return null;
+}
+
+/**
+ * Find the best-matching element by class-set recall: of the classes we
+ * recorded, what fraction does each candidate still carry? Highest wins,
+ * ties broken by document order. Returns null if nothing meets the threshold.
+ */
+function findByClassSimilarity(
+  tagName: string,
+  recorded: readonly string[],
+  scope: ParentNode,
+): Element | null {
+  const recordedSet = new Set(recorded);
+  const recordedCount = recordedSet.size;
+  if (recordedCount === 0) return null;
+
+  let bestEl: Element | null = null;
+  let bestScore = 0;
+
+  const candidates = scope.querySelectorAll(tagName);
+  for (const el of Array.from(candidates)) {
+    const candidateClasses = filterStableClasses(Array.from(el.classList));
+    if (candidateClasses.length === 0) continue;
+
+    let matched = 0;
+    for (const c of candidateClasses) {
+      if (recordedSet.has(c)) matched += 1;
+    }
+    const score = matched / recordedCount;
+    if (score > bestScore) {
+      bestScore = score;
+      bestEl = el;
+    }
+  }
+
+  return bestScore >= CLASS_SIMILARITY_THRESHOLD ? bestEl : null;
 }

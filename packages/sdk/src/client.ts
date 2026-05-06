@@ -62,12 +62,16 @@ export class ApiClient {
       name: string;
       description: string | null;
       isPublished: boolean;
+      dimBackground: boolean;
       steps: Array<{
         id?: string;
         order: number;
         title: string;
         body: string;
         targetProfile: unknown;
+        revealActions?: unknown[];
+        dimBackground?: boolean;
+        advanceOnTargetClick?: boolean;
         placement: string;
         pageUrlPattern: string | null;
       }>;

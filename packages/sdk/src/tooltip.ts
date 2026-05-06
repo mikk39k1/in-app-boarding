@@ -13,6 +13,7 @@ import { getShadowRoot } from "./shadow-host";
 export interface TooltipOptions {
   title: string;
   body: string;
+  dimBackground?: boolean;
   placement?: Placement;
   primaryLabel?: string;
   secondaryLabel?: string;
@@ -38,6 +39,9 @@ export function showTooltip(
   options: TooltipOptions,
 ): TooltipHandle {
   const root = getShadowRoot();
+
+  const spotlight = document.createElement("div");
+  spotlight.className = "spotlight";
 
   const tooltip = document.createElement("div");
   tooltip.className = "tooltip";
@@ -93,6 +97,9 @@ export function showTooltip(
 
   let current = options;
   render(current);
+  if (current.dimBackground) {
+    root.appendChild(spotlight);
+  }
   root.appendChild(tooltip);
 
   const cleanup = autoUpdate(target, tooltip, () => {
@@ -126,17 +133,35 @@ export function showTooltip(
         });
       }
     });
+
+    if (current.dimBackground) {
+      const rect = target.getBoundingClientRect();
+      Object.assign(spotlight.style, {
+        left: `${rect.left + window.scrollX - 8}px`,
+        top: `${rect.top + window.scrollY - 8}px`,
+        width: `${rect.width + 16}px`,
+        height: `${rect.height + 16}px`,
+      });
+    }
   });
 
   return {
     element: tooltip,
     update(next) {
+      const wasDimmed = Boolean(current.dimBackground);
       current = { ...current, ...next };
       render(current);
+      const isDimmed = Boolean(current.dimBackground);
+      if (!wasDimmed && isDimmed) {
+        root.appendChild(spotlight);
+      } else if (wasDimmed && !isDimmed) {
+        spotlight.remove();
+      }
     },
     destroy() {
       cleanup();
       tooltip.remove();
+      spotlight.remove();
     },
   };
 }

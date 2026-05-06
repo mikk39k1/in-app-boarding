@@ -3,6 +3,7 @@ import type { SdkContext } from "../init";
 import { log } from "../log";
 import { getShadowRoot } from "../shadow-host";
 import { recordProfile, findElement } from "../targeting/profile";
+import { inferRevealActionsForElement } from "../targeting/reveal";
 import { highlight } from "../tooltip";
 
 interface BuilderState {
@@ -56,6 +57,22 @@ function renderPanel(ctx: SdkContext, state: BuilderState) {
       : `${state.steps.length} step${state.steps.length === 1 ? "" : "s"}.`;
   body.appendChild(intro);
 
+  const flowDimRow = document.createElement("label");
+  flowDimRow.style.display = "flex";
+  flowDimRow.style.alignItems = "center";
+  flowDimRow.style.gap = "8px";
+  const flowDimInput = document.createElement("input");
+  flowDimInput.type = "checkbox";
+  flowDimInput.checked = Boolean(state.flow.dimBackground);
+  flowDimInput.addEventListener("change", () => {
+    state.flow.dimBackground = flowDimInput.checked;
+    state.dirty = true;
+  });
+  const flowDimText = document.createElement("span");
+  flowDimText.textContent = "Dim background by default";
+  flowDimRow.append(flowDimInput, flowDimText);
+  body.appendChild(flowDimRow);
+
   state.steps
     .sort((a, b) => a.order - b.order)
     .forEach((step, idx) => {
@@ -79,6 +96,7 @@ function renderPanel(ctx: SdkContext, state: BuilderState) {
     startPicking((el) => {
       state.picking = false;
       const profile = recordProfile(el);
+      const revealActions = inferRevealActionsForElement(el);
       const newStep: FlowStepDTO = {
         id: `tmp-${Date.now()}`,
         flowId: state.flow.id,
@@ -86,6 +104,9 @@ function renderPanel(ctx: SdkContext, state: BuilderState) {
         title: `Step ${state.steps.length + 1}`,
         body: "",
         targetProfile: profile,
+        revealActions,
+        dimBackground: undefined,
+        advanceOnTargetClick: false,
         placement: "auto",
         pageUrlPattern: null,
       };
@@ -111,11 +132,15 @@ function renderPanel(ctx: SdkContext, state: BuilderState) {
     saveBtn.textContent = "Saving…";
     try {
       const updated = await ctx.client.updateFlow(state.flow.id, {
+        dimBackground: state.flow.dimBackground,
         steps: state.steps.map((s, i) => ({
           order: i,
           title: s.title,
           body: s.body,
           targetProfile: s.targetProfile,
+          revealActions: s.revealActions,
+          dimBackground: s.dimBackground,
+          advanceOnTargetClick: s.advanceOnTargetClick,
           placement: s.placement,
           pageUrlPattern: s.pageUrlPattern,
         })),
@@ -180,8 +205,61 @@ function renderStep(
 
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.textContent = describeProfile(step.targetProfile);
+  const revealCount = step.revealActions?.length ?? 0;
+  meta.textContent =
+    revealCount > 0
+      ? `${describeProfile(step.targetProfile)} · reveals ${revealCount} target${revealCount === 1 ? "" : "s"}`
+      : describeProfile(step.targetProfile);
   wrap.appendChild(meta);
+
+  const dimRow = document.createElement("label");
+  dimRow.className = "meta";
+  dimRow.style.display = "flex";
+  dimRow.style.alignItems = "center";
+  dimRow.style.gap = "6px";
+  dimRow.textContent = "Backdrop:";
+  const dimSelect = document.createElement("select");
+  dimSelect.style.font = "inherit";
+  dimSelect.style.border = "1px solid var(--ib-border)";
+  dimSelect.style.borderRadius = "6px";
+  dimSelect.style.padding = "2px 6px";
+  [
+    { value: "", label: "Inherit flow" },
+    { value: "true", label: "Force on" },
+    { value: "false", label: "Force off" },
+  ].forEach((opt) => {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.label;
+    dimSelect.appendChild(option);
+  });
+  dimSelect.value =
+    step.dimBackground === true ? "true" : step.dimBackground === false ? "false" : "";
+  dimSelect.addEventListener("change", () => {
+    if (dimSelect.value === "true") step.dimBackground = true;
+    else if (dimSelect.value === "false") step.dimBackground = false;
+    else step.dimBackground = undefined;
+    state.dirty = true;
+  });
+  dimRow.appendChild(dimSelect);
+  wrap.appendChild(dimRow);
+
+  const advanceRow = document.createElement("label");
+  advanceRow.className = "meta";
+  advanceRow.style.display = "flex";
+  advanceRow.style.alignItems = "center";
+  advanceRow.style.gap = "8px";
+  const advanceInput = document.createElement("input");
+  advanceInput.type = "checkbox";
+  advanceInput.checked = Boolean(step.advanceOnTargetClick);
+  advanceInput.addEventListener("change", () => {
+    step.advanceOnTargetClick = advanceInput.checked;
+    state.dirty = true;
+  });
+  const advanceText = document.createElement("span");
+  advanceText.textContent = "Advance when target is clicked";
+  advanceRow.append(advanceInput, advanceText);
+  wrap.appendChild(advanceRow);
 
   // Highlight on hover.
   wrap.addEventListener("mouseenter", () => {

@@ -3,6 +3,7 @@ import type { SdkContext } from "../init";
 import { log } from "../log";
 import { showTooltip, type TooltipHandle } from "../tooltip";
 import { waitForElement } from "../targeting/observer";
+import { revealTarget } from "../targeting/reveal";
 
 const STORAGE_PREFIX = "ib:flow:";
 
@@ -69,15 +70,23 @@ export async function startRunner(ctx: SdkContext) {
 async function runFlow(flow: FlowDTO) {
   let index = 0;
   let currentTooltip: TooltipHandle | null = null;
+  let disposeTargetClick: (() => void) | null = null;
+  let advancing = false;
 
   const steps = [...flow.steps].sort((a, b) => a.order - b.order);
 
   async function show(step: FlowStepDTO) {
+    advancing = false;
+    disposeTargetClick?.();
+    disposeTargetClick = null;
+
     if (!urlMatches(step.pageUrlPattern)) {
       log.debug("step skipped — URL does not match", step);
       next();
       return;
     }
+
+    await revealTarget(step.targetProfile, step.revealActions);
 
     const target = await waitForElement(step.targetProfile, {
       timeoutMs: 10_000,
@@ -93,6 +102,7 @@ async function runFlow(flow: FlowDTO) {
     currentTooltip = showTooltip(target, {
       title: step.title,
       body: step.body,
+      dimBackground: step.dimBackground ?? flow.dimBackground,
       placement: step.placement,
       meta: `${index + 1} / ${steps.length}`,
       primaryLabel: isLast ? "Done" : "Next",
@@ -107,6 +117,22 @@ async function runFlow(flow: FlowDTO) {
       onSecondary: index > 0 ? () => prev() : undefined,
       onClose: () => finish(),
     });
+
+    if (step.advanceOnTargetClick) {
+      const onTargetClick = () => {
+        if (advancing) return;
+        advancing = true;
+        if (isLast) {
+          finish();
+        } else {
+          next();
+        }
+      };
+      target.addEventListener("click", onTargetClick, { once: true });
+      disposeTargetClick = () => {
+        target.removeEventListener("click", onTargetClick);
+      };
+    }
   }
 
   function next() {
@@ -125,6 +151,8 @@ async function runFlow(flow: FlowDTO) {
   }
 
   function finish() {
+    disposeTargetClick?.();
+    disposeTargetClick = null;
     currentTooltip?.destroy();
     currentTooltip = null;
     markFlowComplete(flow.id);

@@ -86,6 +86,16 @@ button { cursor: pointer; font-family: inherit; }
   transition: top 80ms ease, left 80ms ease, width 80ms ease, height 80ms ease;
 }
 
+.spotlight {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(9, 9, 11, 0.58);
+  border: 2px solid rgba(37, 99, 235, 0.9);
+  z-index: 2147483645;
+  transition: top 100ms ease, left 100ms ease, width 100ms ease, height 100ms ease;
+}
+
 .builder-panel {
   position: fixed;
   right: 16px;

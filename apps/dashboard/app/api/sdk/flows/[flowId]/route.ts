@@ -14,7 +14,21 @@ const ProfileSchema = z.object({
   role: z.string().optional(),
   ariaLabel: z.string().optional(),
   text: z.string().optional(),
+  classes: z.array(z.string()).max(64).optional(),
   domPath: z.string().optional(),
+});
+
+const RevealActionSchema = z.object({
+  triggerProfile: ProfileSchema,
+  ensureAttribute: z
+    .object({
+      name: z.string().min(1),
+      value: z.string(),
+    })
+    .optional(),
+  ensureClassAny: z.array(z.string().min(1)).max(16).optional(),
+  source: z.enum(["aria", "heuristic", "manual", "recorded"]).optional(),
+  priority: z.number().int().min(0).max(10_000).optional(),
 });
 
 const StepSchema = z.object({
@@ -23,6 +37,9 @@ const StepSchema = z.object({
   title: z.string().min(1),
   body: z.string().default(""),
   targetProfile: ProfileSchema,
+  revealActions: z.array(RevealActionSchema).max(8).optional(),
+  dimBackground: z.boolean().optional(),
+  advanceOnTargetClick: z.boolean().optional(),
   placement: z.string().default("auto"),
   pageUrlPattern: z.string().nullable().optional(),
 });
@@ -31,6 +48,7 @@ const PutBody = z.object({
   name: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
   isPublished: z.boolean().optional(),
+  dimBackground: z.boolean().optional(),
   steps: z.array(StepSchema).optional(),
 });
 
@@ -107,7 +125,7 @@ export async function PUT(
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const { name, description, isPublished, steps } = parsed.data;
+  const { name, description, isPublished, dimBackground, steps } = parsed.data;
 
   await prisma.$transaction(async (tx) => {
     await tx.flow.update({
@@ -116,6 +134,7 @@ export async function PUT(
         ...(name !== undefined ? { name } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(isPublished !== undefined ? { isPublished } : {}),
+        ...(dimBackground !== undefined ? { dimBackground } : {}),
       },
     });
 
@@ -131,6 +150,9 @@ export async function PUT(
             title: s.title,
             body: s.body ?? "",
             targetProfile: s.targetProfile,
+            revealActions: s.revealActions,
+            dimBackground: s.dimBackground ?? null,
+            advanceOnTargetClick: s.advanceOnTargetClick ?? false,
             placement: s.placement ?? "auto",
             pageUrlPattern: s.pageUrlPattern ?? null,
           })),

@@ -27,6 +27,8 @@ export default function Page() {
       <nav className="tabs" role="tablist">
         <button
           role="tab"
+          id="tab-overview"
+          aria-controls="panel-overview"
           aria-selected={tab === "overview"}
           className={tab === "overview" ? "active" : ""}
           onClick={() => setTab("overview")}
@@ -36,14 +38,19 @@ export default function Page() {
         </button>
         <button
           role="tab"
+          id="tab-settings"
+          aria-controls="panel-settings"
           aria-selected={tab === "settings"}
           className={tab === "settings" ? "active" : ""}
           onClick={() => setTab("settings")}
+          data-onboarding="tab-settings"
         >
           Settings
         </button>
         <button
           role="tab"
+          id="tab-integrations"
+          aria-controls="panel-integrations"
           aria-selected={tab === "integrations"}
           className={tab === "integrations" ? "active" : ""}
           onClick={() => setTab("integrations")}
@@ -53,8 +60,12 @@ export default function Page() {
         </button>
       </nav>
 
-      {tab === "overview" && (
-        <section>
+      <section
+        role="tabpanel"
+        id="panel-overview"
+        aria-labelledby="tab-overview"
+        hidden={tab !== "overview"}
+      >
           <div className="grid">
             <div className="card" id="metric-revenue">
               <h3>Revenue</h3>
@@ -76,11 +87,14 @@ export default function Page() {
               <button className="secondary">Status page</button>
             </div>
           </div>
-        </section>
-      )}
+      </section>
 
-      {tab === "settings" && (
-        <section>
+      <section
+        role="tabpanel"
+        id="panel-settings"
+        aria-labelledby="tab-settings"
+        hidden={tab !== "settings"}
+      >
           <div className="card" style={{ maxWidth: 480 }}>
             <h3>Workspace</h3>
             <label className="field">
@@ -103,11 +117,14 @@ export default function Page() {
               <button className="secondary">Cancel</button>
             </div>
           </div>
-        </section>
-      )}
+      </section>
 
-      {tab === "integrations" && (
-        <section>
+      <section
+        role="tabpanel"
+        id="panel-integrations"
+        aria-labelledby="tab-integrations"
+        hidden={tab !== "integrations"}
+      >
           <div className="grid">
             <div className="card">
               <h3>Slack</h3>
@@ -120,8 +137,7 @@ export default function Page() {
               <button className="primary">Connect</button>
             </div>
           </div>
-        </section>
-      )}
+      </section>
     </main>
   );
 }
