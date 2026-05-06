@@ -3,8 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma, type Environment } from "@ib/db";
 import { requireUser } from "@/lib/auth";
+import { prisma } from "@ib/db";
 import {
   generateApiKey,
   hashApiKey,
@@ -32,7 +32,7 @@ export async function createProject(formData: FormData) {
   });
 
   // Auto-mint a dev + prod key on project creation so users can copy them.
-  for (const env of ["DEV", "PROD"] as Environment[]) {
+  for (const env of ["DEV", "PROD"] as const) {
     const plaintext = generateApiKey(env);
     await prisma.apiKey.create({
       data: {

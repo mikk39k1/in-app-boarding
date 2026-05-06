@@ -11,7 +11,7 @@
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:push": "dotenv -e ../../.env -- prisma db push",
     "prisma:studio": "dotenv -e ../../.env -- prisma studio",
-    "build": "echo 'no build for @ib/db (consumed via TS source)'",
+    "build": "prisma generate --schema prisma/schema.prisma",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
